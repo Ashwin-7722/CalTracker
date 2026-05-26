@@ -1,0 +1,108 @@
+version: '3.9'
+
+services:
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: postgres-container
+    environment:
+      POSTGRES_DB: calorie_tracker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - caltrack-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # User Service
+  user-service:
+    build: ./user-service
+    container_name: user-service-container
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/calorie_tracker
+      JWT_SECRET: mysecretkey
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - caltrack-network
+    restart: on-failure
+
+  # Meal Service
+  meal-service:
+    build: ./meal-service
+    container_name: meal-service-container
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/calorie_tracker
+      JWT_SECRET: mysecretkey
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - caltrack-network
+    restart: on-failure
+
+  # Calorie Service
+  calorie-service:
+    build: ./calorie-service
+    container_name: calorie-service-container
+    ports:
+      - "8003:8003"
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/calorie_tracker
+      JWT_SECRET: mysecretkey
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - caltrack-network
+    restart: on-failure
+
+  # API Gateway
+  gateway:
+    build: ./api-gateway
+    container_name: gateway-container
+    ports:
+      - "8000:8000"
+    environment:
+      USER_SERVICE_URL: http://user-service:8001
+      MEAL_SERVICE_URL: http://meal-service:8002
+      CALORIE_SERVICE_URL: http://calorie-service:8003
+    depends_on:
+      - user-service
+      - meal-service
+      - calorie-service
+    networks:
+      - caltrack-network
+    restart: on-failure
+
+  # React Frontend
+  frontend:
+    build: ./frontend
+    container_name: frontend-container
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway
+    networks:
+      - caltrack-network
+    restart: on-failure
+
+volumes:
+  postgres_data:
+
+networks:
+  caltrack-network:
+    driver: bridge

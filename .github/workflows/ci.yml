@@ -1,0 +1,88 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+
+  # Backend - Lint and test Python services
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [user-service, meal-service, calorie-service, api-gateway]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: pip install -r ${{ matrix.service }}/requirements.txt
+
+      - name: Run Linting
+        run: |
+          pip install flake8
+          flake8 ${{ matrix.service }}/app/ --max-line-length=120 --ignore=E501,W503
+
+      - name: Verify Service Structure
+        run: |
+          echo "Checking ${{ matrix.service }} structure..."
+          test -f ${{ matrix.service }}/Dockerfile
+          test -f ${{ matrix.service }}/requirements.txt
+          test -f ${{ matrix.service }}/app/main.py
+          echo "${{ matrix.service }} structure is valid!"
+
+  # Frontend - Build React app
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Verify Build Output
+        run: |
+          test -d frontend/dist
+          echo "Frontend build successful!"
+
+  # Docker - Build all images
+  docker:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Images
+        run: docker compose build
+
+      - name: Verify Docker Images
+        run: |
+          docker images
+          echo "All Docker images built successfully!"
